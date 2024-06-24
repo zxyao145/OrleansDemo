@@ -2,20 +2,27 @@
 using Orleans;
 using OrlensDemo.GrainInterfacesLib;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using System.Runtime.CompilerServices;
 
 try
 {
-    using (var client = await ConnectClientAsync())
+    var host = CreateHost();
+    Console.WriteLine("Connecting to server \n");
+    await host.StartAsync();
+    Console.WriteLine("Connected \n");
+
+    var client = host.Services.GetRequiredService<IClusterClient>();
+    for (int i = 0; i < 10; i++)
     {
-        for (int i = 0; i < 10; i++)
-        {
-            var device = client.GetGrain<IDeviceGrain>("did-" + i);
-            var response = await device.GetState();
-            Console.WriteLine($"{response.IsOnLine}");
-        }
-      
-        Console.ReadKey();
+        var device = client.GetGrain<IDeviceGrain>("did-" + i);
+        var response = await device.GetState();
+        Console.WriteLine($"{response.IsOnLine}");
     }
+
+    Console.ReadKey();
 
     return 0;
 }
@@ -28,20 +35,24 @@ catch (Exception e)
     return 1;
 }
 
-static async Task<IClusterClient> ConnectClientAsync()
+
+static IHost CreateHost()
 {
-    var client = new ClientBuilder()
-        .UseLocalhostClustering()
-        .Configure<ClusterOptions>(options =>
+    var services = new ServiceCollection();
+    var host = new HostBuilder()
+        .UseOrleansClient(clientBuilder =>
         {
-            options.ClusterId = "dev";
-            options.ServiceId = "OrleansBasics";
+            clientBuilder.UseLocalhostClustering();
+
+            clientBuilder.Configure<ClusterOptions>(options =>
+            {
+                options.ClusterId = "dev";
+                options.ServiceId = "OrleansBasics";
+            });
         })
+        .UseConsoleLifetime()
         .ConfigureLogging(logging => logging.AddConsole())
         .Build();
+    return host;
 
-    await client.Connect();
-    Console.WriteLine("Client successfully connected to silo host \n");
-
-    return client;
 }
